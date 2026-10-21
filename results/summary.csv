@@ -1,0 +1,10 @@
+scenario,method,mean_stopping_execution,mean_discoveries,mean_discoveries_missed,mean_budget_used_percent
+fast_decay,Fixed Budget,10000.0,100.41,0.0,100.0
+fast_decay,Trend Based,4910.0,97.91,2.5,49.1
+fast_decay,Zero Discovery,5787.39,99.15,1.26,57.873900000000006
+intermittent,Fixed Budget,10000.0,445.08,0.0,100.0
+intermittent,Trend Based,10000.0,445.08,0.0,100.0
+intermittent,Zero Discovery,10000.0,445.08,0.0,100.0
+slow_decay,Fixed Budget,10000.0,252.38,0.0,100.0
+slow_decay,Trend Based,10000.0,252.38,0.0,100.0
+slow_decay,Zero Discovery,10000.0,252.38,0.0,100.0
