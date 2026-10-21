@@ -1,0 +1,28 @@
+
+{
+  "experiment": {
+    "name": "FuzzStop-Lab",
+    "type": "simulation",
+    "random_seed": 42,
+    "campaigns": 100,
+    "maximum_executions": 10000
+  },
+  "simulation": {
+    "initial_discovery_probability": 0.08,
+    "discovery_probability_decay": 0.0004
+  },
+  "stopping_criteria": {
+    "fixed_budget": {
+      "enabled": true
+    },
+    "zero_discovery": {
+      "enabled": true,
+      "consecutive_zero_limit": 1000
+    },
+    "trend_based": {
+      "enabled": true,
+      "window_size": 500,
+      "discovery_rate_ratio": 0.1
+    }
+  }
+}
