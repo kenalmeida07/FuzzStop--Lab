@@ -1,31 +1,25 @@
 
+import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from scipy.stats import linregress
-import os
 
 SEED = 42
 CAMPAIGNS = 100
 MAX_EXECUTIONS = 10000
 WINDOW_SIZE = 500
 ZERO_DISCOVERY_LIMIT = 1000
+TREND_RATIO = 0.10
 
-np.random.seed(SEED)
 
+def simulate_fuzzing(max_executions, rng):
+    discoveries = np.zeros(max_executions, dtype=int)
 
-def simulate_fuzzing(max_executions):
-    discovery_probability = 0.08
-    decay = 0.0004
-    discoveries = []
+    for i in range(max_executions):
+        probability = 0.08 * np.exp(-0.0004 * i)
+        discoveries[i] = int(rng.random() < probability)
 
-    for execution in range(max_executions):
-        probability = discovery_probability * np.exp(-decay * execution)
-        discoveries.append(
-            int(np.random.random() < probability)
-        )
-
-    return np.array(discoveries)
+    return discoveries
 
 
 def fixed_budget(discoveries):
@@ -36,7 +30,7 @@ def zero_discovery_stopping(discoveries):
     consecutive_zeros = 0
 
     for i, discovery in enumerate(discoveries):
-        if discovery == 1:
+        if discovery:
             consecutive_zeros = 0
         else:
             consecutive_zeros += 1
@@ -48,17 +42,23 @@ def zero_discovery_stopping(discoveries):
 
 
 def trend_based_stopping(discoveries):
-    if len(discoveries) < WINDOW_SIZE * 2:
-        return len(discoveries)
-
-    for end in range(WINDOW_SIZE * 2, len(discoveries) + 1, WINDOW_SIZE):
+    for end in range(
+        WINDOW_SIZE * 2,
+        len(discoveries) + 1,
+        WINDOW_SIZE
+    ):
+        previous = discoveries[
+            end - WINDOW_SIZE * 2:end - WINDOW_SIZE
+        ]
         recent = discoveries[end - WINDOW_SIZE:end]
-        previous = discoveries[end - WINDOW_SIZE * 2:end - WINDOW_SIZE]
 
-        recent_rate = np.mean(recent)
         previous_rate = np.mean(previous)
+        recent_rate = np.mean(recent)
 
-        if previous_rate > 0 and recent_rate < 0.1 * previous_rate:
+        if (
+            previous_rate > 0
+            and recent_rate <= TREND_RATIO * previous_rate
+        ):
             return end
 
     return len(discoveries)
@@ -66,44 +66,50 @@ def trend_based_stopping(discoveries):
 
 def run_experiments():
     os.makedirs("results", exist_ok=True)
+    rng = np.random.default_rng(SEED)
     records = []
 
-    for campaign in range(CAMPAIGNS):
-        discoveries = simulate_fuzzing(MAX_EXECUTIONS)
-        total_discoveries = int(np.sum(discoveries))
+    for campaign in range(1, CAMPAIGNS + 1):
+        discoveries = simulate_fuzzing(MAX_EXECUTIONS, rng)
+        full_total = int(np.sum(discoveries))
 
-        methods = {
+        stopping_methods = {
             "Fixed Budget": fixed_budget(discoveries),
             "Zero Discovery": zero_discovery_stopping(discoveries),
             "Trend Based": trend_based_stopping(discoveries)
         }
 
-        for method, stopping_point in methods.items():
+        for method, stop in stopping_methods.items():
+            found = int(np.sum(discoveries[:stop]))
+
             records.append({
-                "campaign": campaign + 1,
+                "campaign": campaign,
                 "method": method,
-                "stopping_execution": stopping_point,
-                "discoveries_at_stop": int(
-                    np.sum(discoveries[:stopping_point])
-                ),
-                "discoveries_in_full_campaign": total_discoveries
+                "stopping_execution": stop,
+                "discoveries_at_stop": found,
+                "full_budget_discoveries": full_total,
+                "discoveries_missed": full_total - found,
+                "budget_used_percent": 100 * stop / MAX_EXECUTIONS
             })
 
     results = pd.DataFrame(records)
-    results.to_csv("results/experiment_results.csv", index=False)
+    results.to_csv(
+        "results/experiment_results.csv", index=False
+    )
 
-    summary = results.groupby("method").agg({
-        "stopping_execution": "mean",
-        "discoveries_at_stop": "mean",
-        "discoveries_in_full_campaign": "mean"
-    }).reset_index()
+    summary = results.groupby("method").agg(
+        mean_stopping_execution=("stopping_execution", "mean"),
+        mean_discoveries=("discoveries_at_stop", "mean"),
+        mean_discoveries_missed=("discoveries_missed", "mean"),
+        mean_budget_used_percent=("budget_used_percent", "mean")
+    ).reset_index()
 
     summary.to_csv("results/summary.csv", index=False)
 
-    print("\nFUZZSTOP-LAB EXPERIMENT SUMMARY")
-    print("=" * 55)
-    print(summary.to_string(index=False))
-    print("\nResults saved in the results/ directory.")
+    print("\nFUZZSTOP-LAB: SIMULATION RESULTS")
+    print("=" * 65)
+    print(summary.round(3).to_string(index=False))
+    print("\nNote: These are simulated results, not real fuzzing measurements.")
 
     plt.figure(figsize=(9, 5))
 
@@ -112,21 +118,23 @@ def run_experiments():
             group["stopping_execution"],
             group["discoveries_at_stop"],
             label=method,
-            alpha=0.7
+            alpha=0.65
         )
 
     plt.xlabel("Stopping Execution")
-    plt.ylabel("Discoveries at Stop")
-    plt.title("Fuzzing Stopping Criteria Comparison")
+    plt.ylabel("Discovery Events at Stop")
+    plt.title("Comparison of Fuzzing Stopping Criteria")
     plt.legend()
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.savefig("results/stopping_comparison.png", dpi=300)
     plt.close()
 
-    print("Graph saved as results/stopping_comparison.png")
+    print("\nGenerated:")
+    print("- results/experiment_results.csv")
+    print("- results/summary.csv")
+    print("- results/stopping_comparison.png")
 
 
 if __name__ == "__main__":
     run_experiments()
-
